@@ -1,0 +1,46 @@
+-- How much a log message matters, least to most. A logger set to a level
+-- writes that level and everything above it: at `Info`, `Debug` and
+-- `Trace` are dropped.
+
+export enum Level
+  Trace,
+  Debug,
+  Info,
+  Warn,
+  Error,
+
+  -- Nothing is that important: a logger at `Off` writes nothing.
+  Off
+
+  -- Its place in the order, for comparing.
+
+  fn rank() -> integer
+    return match self
+      case Level.Trace then 0
+      case Level.Debug then 1
+      case Level.Info then 2
+      case Level.Warn then 3
+      case Level.Error then 4
+      case Level.Off then 5
+    end
+  end
+
+  -- Whether a message at this level gets through a logger at `threshold`.
+
+  fn passes(threshold: Level) -> boolean
+    return self.rank() >= threshold.rank()
+  end
+
+  -- As a log line names it, five wide so the messages line up.
+
+  fn label() -> string
+    return match self
+      case Level.Trace then "TRACE"
+      case Level.Debug then "DEBUG"
+      case Level.Info then "INFO "
+      case Level.Warn then "WARN "
+      case Level.Error then "ERROR"
+      case Level.Off then "OFF  "
+    end
+  end
+end

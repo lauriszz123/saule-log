@@ -1,0 +1,152 @@
+-- The logging set-up a whole program shares: where records go (its
+-- sinks) and how much each logger writes (its levels).
+--
+-- Nothing has to be set up. The first record logged reads the environment
+-- and sends everything to the terminal:
+--
+--   SAULE_LOG=debug                  every logger at Debug
+--   SAULE_LOG=warn,wm=debug          Warn, but `wm` and below at Debug
+--   SAULE_LOG=info,wm.session=trace  a name covers the loggers under it
+--   SAULE_LOG_FILE=/tmp/wm.log       a copy of every line in that file
+--
+-- A program can change it all in code too: `Log.setLevel`, `Log.addSink`,
+-- `Log.clearSinks`.
+
+from ConsoleSink import ConsoleSink
+from FileSink import FileSink
+from Level import Level
+from LogRecord import LogRecord
+from LogSink import LogSink
+
+export class Log
+  -- The level for loggers no setting names.
+  static local fallback: Level = Level.Info
+
+  -- Levels by logger name: a name covers itself and the names under it
+  -- ("wm" covers "wm.session"), and the longest name that matches wins.
+  static local levels: table<string, Level> = {}
+
+  static local sinks: table<LogSink> = {}
+
+  -- Whether the environment has been read.
+  static local ready: boolean = false
+
+  -- Goes up with every change of level, so a logger knows when the level
+  -- it remembered is stale (see `Logger`).
+  static local version: integer = 0
+
+  -- The level a logger called `name` writes at.
+  static fn levelFor(name: string) -> Level
+    Log.setup()
+    local level = Log.fallback
+    local longest = -1
+    for prefix, chosen in Log.levels do
+      local covers = name == prefix or String.starts(name, prefix .. ".")
+      local length = String.len(prefix)
+      if covers and length > longest then
+        level = chosen
+        longest = length
+      end
+    end
+    return level
+  end
+
+  -- Write at `level`: every logger when `name` is nil, else `name` and the
+  -- loggers under it.
+  static fn setLevel(level: Level, name: string? = nil) -> nil
+    Log.setup()
+    if name == nil then
+      Log.fallback = level
+    else
+      Log.levels[name!] = level
+    end
+    Log.version += 1
+  end
+
+  -- Levels as `SAULE_LOG` writes them: "warn,wm=debug". A part that isn't
+  -- understood is reported and skipped.
+  static fn configure(spec: string) -> nil
+    for part in String.split(spec, ",") do
+      local text = String.trim(part)
+      if text != "" then
+        local pieces = String.split(text, "=")
+        if #pieces == 1 then
+          Log.apply(nil, pieces[1])
+        elseif #pieces == 2 then
+          Log.apply(String.trim(pieces[1]), pieces[2])
+        else
+          Io.stderr.write("log: cannot read \"" .. text .. "\"\n")
+        end
+      end
+    end
+  end
+
+  -- Send records to `sink` as well as wherever they go now.
+  static fn addSink(sink: LogSink) -> nil
+    Log.setup()
+    Table.insert(Log.sinks, sink)
+  end
+
+  -- Stop sending records anywhere, the terminal included: before
+  -- `addSink`, to send them only there.
+  static fn clearSinks() -> nil
+    Log.setup()
+    Log.sinks = {}
+  end
+
+  -- See `version` above.
+  static fn changes() -> integer
+    return Log.version
+  end
+
+  -- Hand `record` to every sink. A logger has already checked its level.
+  static fn emit(record: LogRecord) -> nil
+    Log.setup()
+    for sink in Log.sinks do
+      sink.write(record)
+    end
+  end
+
+  -- The level called `name`, ignoring case ("debug", "WARN"), or nil.
+  -- "warning" counts as warn.
+  static fn parseLevel(name: string) -> Level?
+    return match String.lower(String.trim(name))
+      case "trace" then Level.Trace
+      case "debug" then Level.Debug
+      case "info" then Level.Info
+      case "warn" then Level.Warn
+      case "warning" then Level.Warn
+      case "error" then Level.Error
+      case "off" then Level.Off
+      case _ then nil
+    end
+  end
+
+  -- Read the environment, once: the terminal, a file if one is named, and
+  -- the levels.
+  static local fn setup() -> nil
+    if Log.ready then
+      return
+    end
+    Log.ready = true
+    Table.insert(Log.sinks, ConsoleSink())
+
+    local file = Os.getenv("SAULE_LOG_FILE") ?? ""
+    if file != "" then
+      Table.insert(Log.sinks, FileSink(file))
+    end
+    local spec = Os.getenv("SAULE_LOG") ?? ""
+    if spec != "" then
+      Log.configure(spec)
+    end
+  end
+
+  static local fn apply(name: string?, levelName: string) -> nil
+    local level = Log.parseLevel(levelName)
+    if level == nil then
+      Io.stderr.write("log: no level called \"" .. levelName .. "\"\n")
+      return
+    end
+    Log.setLevel(level!, name)
+  end
+end

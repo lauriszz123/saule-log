@@ -1,0 +1,20 @@
+-- log — logging for Saule programs: named loggers, levels set from the
+-- environment or in code, and lines written to the terminal, a file or
+-- memory.
+--
+--   from log import Logger
+--
+--   local log = Logger("wm")
+--   log.info("started", {screen: "1024x600"})
+--
+-- See `Log` for the settings, `LogSink` for where lines go.
+
+export from Level import *
+export from LogRecord import *
+export from LogFormat import *
+export from LogSink import *
+export from ConsoleSink import *
+export from FileSink import *
+export from MemorySink import *
+export from Log import *
+export from Logger import *

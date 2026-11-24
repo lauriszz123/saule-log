@@ -1,0 +1,34 @@
+-- Log lines on standard error, where a program's diagnostics go, so they
+-- never mix with what it prints as its output.
+--
+-- Coloured unless asked not to be: `NO_COLOR` set (the convention, see
+-- no-color.org), `SAULE_LOG_COLOR=0`, or no terminal named in `TERM`, as
+-- when the program was started by another one.
+
+from LogFormat import LogFormat
+from LogRecord import LogRecord
+from LogSink import LogSink
+
+export class ConsoleSink implements LogSink
+  colour: boolean
+
+  fn init(colour: boolean? = nil)
+    self.colour = colour ?? ConsoleSink.wantsColour()
+  end
+
+  fn write(record: LogRecord)
+    Io.stderr.write(LogFormat.line(record, self.colour) .. "\n")
+  end
+
+  static fn wantsColour() -> boolean
+    if Os.getenv("NO_COLOR") != nil then
+      return false
+    end
+    local asked = Os.getenv("SAULE_LOG_COLOR")
+    if asked != nil then
+      return asked! != "0"
+    end
+    local term = Os.getenv("TERM") ?? ""
+    return term != "" and term != "dumb"
+  end
+end

@@ -1,0 +1,85 @@
+-- What a part of a program logs through, named for that part:
+--
+--   local log = Logger("wm.session")
+--   log.info("window opened", {id: 3, title: "Settings"})
+--   log.debug("focus moved", {to: 3})
+--   log.warn("no settings service", {reason: e})
+--
+-- A message is a fixed phrase and the values that change go in the fields,
+-- so lines are easy to search and to read: "window opened id=3 ...", not
+-- "Settings opened, id: 3". Whether a level is written is decided by the
+-- name (see `Log`); asking costs a comparison, so a `debug` line can stay
+-- in code that runs every frame.
+
+from Level import Level
+from Log import Log
+from LogRecord import LogRecord
+
+export class Logger
+  -- Dotted, from the program down: "wm", "wm.session".
+  name: string
+
+  -- The level `Log` gave this name, and at which of its changes.
+  local level: Level
+  local seen: integer
+
+  fn init(name: string)
+    self.name = name
+    self.level = Level.Info
+    self.seen = -1
+  end
+
+  -- A logger for a part of this one's: `Logger("wm").child("session")` is
+  -- "wm.session".
+  fn child(name: string) -> Logger
+    return Logger(self.name .. "." .. name)
+  end
+
+  -- Whether a message at `level` would be written: for working out
+  -- something costly only to log it.
+  fn enabled(level: Level) -> boolean
+    if self.seen != Log.changes() then
+      self.level = Log.levelFor(self.name)
+      self.seen = Log.changes()
+    end
+    if self.level == Level.Off then
+      return false
+    end
+    return level.passes(self.level)
+  end
+
+  fn trace(message: string, fields: table? = nil) -> nil
+    self.log(Level.Trace, message, fields)
+  end
+
+  fn debug(message: string, fields: table? = nil) -> nil
+    self.log(Level.Debug, message, fields)
+  end
+
+  fn info(message: string, fields: table? = nil) -> nil
+    self.log(Level.Info, message, fields)
+  end
+
+  fn warn(message: string, fields: table? = nil) -> nil
+    self.log(Level.Warn, message, fields)
+  end
+
+  fn error(message: string, fields: table? = nil) -> nil
+    self.log(Level.Error, message, fields)
+  end
+
+  fn log(level: Level, message: string, fields: table?) -> nil
+    if not self.enabled(level) then
+      return
+    end
+    local none: table = {}
+    local record = LogRecord(
+      Os.timeMillis(),
+      level,
+      self.name,
+      message,
+      fields ?? none
+    )
+    Log.emit(record)
+  end
+end

@@ -1,0 +1,11 @@
+-- Where log records go: the terminal (`ConsoleSink`), a file
+-- (`FileSink`), the last few kept in memory (`MemorySink`), or anything
+-- that implements this.
+--
+-- A sink is only given records that passed their logger's level.
+
+from LogRecord import LogRecord
+
+export interface LogSink
+  fn write(record: LogRecord)
+end

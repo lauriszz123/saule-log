@@ -1,0 +1,45 @@
+-- Log lines appended to a file, uncoloured, each one written out as it
+-- comes so a crash loses nothing that was logged before it.
+--
+-- A file that can't be opened (no such folder, no permission) is reported
+-- once on standard error, and the records meant for it are dropped:
+-- logging never stops the program.
+
+from LogFormat import LogFormat
+from LogRecord import LogRecord
+from LogSink import LogSink
+
+export class FileSink implements LogSink
+  path: string
+
+  local file: File?
+  local failed: boolean
+
+  fn init(path: string)
+    self.path = path
+    self.file = nil
+    self.failed = false
+  end
+
+  fn write(record: LogRecord)
+    local file = self.open()
+    if file == nil then
+      return
+    end
+    file!.write(LogFormat.line(record, false) .. "\n")
+    file!.flush()
+  end
+
+  -- The file, opened for appending the first time it's needed.
+  local fn open() -> File?
+    if self.file != nil or self.failed then
+      return self.file
+    end
+    self.file = Io.open(self.path, IoMode.Append)
+    if self.file == nil then
+      self.failed = true
+      Io.stderr.write("log: cannot write to " .. self.path .. "\n")
+    end
+    return self.file
+  end
+end

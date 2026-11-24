@@ -1,0 +1,102 @@
+from Level import Level
+from Log import Log
+from LogFormat import LogFormat
+from LogRecord import LogRecord
+from Logger import Logger
+from MemorySink import MemorySink
+
+-- Logging only into memory, at the given settings.
+local fn fresh(spec: string) -> MemorySink
+  Log.clearSinks()
+  Log.setLevel(Level.Info)
+  Log.configure(spec)
+  local sink = MemorySink()
+  Log.addSink(sink)
+  return sink
+end
+
+fn test_levels_below_the_logger_are_dropped()
+  local sink = fresh("warn")
+  local log = Logger("app")
+  log.info("hidden")
+  log.warn("shown")
+  log.error("shown too")
+  local records = sink.records()
+  assert(#records == 2)
+  assert(records[1].message == "shown")
+  assert(records[2].level == Level.Error)
+end
+
+fn test_a_name_covers_the_loggers_under_it()
+  local sink = fresh("warn,wm=debug")
+  Logger("wm.session").debug("in")
+  Logger("wmx").debug("out: not under wm")
+  Logger("other").debug("out")
+  local records = sink.records()
+  assert(#records == 1)
+  assert(records[1].source == "wm.session")
+end
+
+fn test_the_longest_name_wins()
+  local sink = fresh("wm=debug,wm.session=error")
+  Logger("wm.session").warn("out")
+  Logger("wm.launcher").debug("in")
+  assert(#sink.records() == 1)
+end
+
+fn test_off_writes_nothing()
+  local sink = fresh("off")
+  Logger("app").error("out")
+  assert(#sink.records() == 0)
+end
+
+fn test_a_logger_sees_a_change_of_level()
+  local sink = fresh("info")
+  local log = Logger("app")
+  log.debug("out")
+  Log.setLevel(Level.Debug, "app")
+  log.debug("in")
+  assert(#sink.records() == 1)
+end
+
+fn test_child_names_join_with_a_dot()
+  assert(Logger("wm").child("session").name == "wm.session")
+end
+
+fn test_levels_parse_ignoring_case()
+  assert(Log.parseLevel("DEBUG") == Level.Debug)
+  assert(Log.parseLevel(" warning ") == Level.Warn)
+  assert(Log.parseLevel("loud") == nil)
+end
+
+fn test_fields_are_sorted_and_quoted_when_needed()
+  local fields: table = {
+    title: "About This System",
+    id: 3,
+    empty: "",
+    name: "wm",
+  }
+  local text = LogFormat.fields(fields)
+  assert(text == "empty=\"\" id=3 name=wm title=\"About This System\"")
+end
+
+fn test_a_line_has_time_level_source_message_and_fields()
+  local fields: table = {id: 3}
+  local record = LogRecord(3723004, Level.Warn, "wm", "window opened", fields)
+  local line = LogFormat.line(record, false)
+  assert(line == "01:02:03.004 WARN  wm  window opened  id=3")
+end
+
+fn test_memory_keeps_the_newest()
+  Log.clearSinks()
+  Log.setLevel(Level.Info)
+  local sink = MemorySink(2)
+  Log.addSink(sink)
+  local log = Logger("app")
+  log.info("one")
+  log.info("two")
+  log.info("three")
+  local records = sink.records()
+  assert(#records == 2)
+  assert(records[1].message == "two")
+end

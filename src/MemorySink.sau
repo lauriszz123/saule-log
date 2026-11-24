@@ -1,0 +1,38 @@
+-- The last records logged, kept in memory: for a program that shows its
+-- own log (a log window, a crash report) rather than leaving it in a
+-- terminal no one is watching.
+
+from LogRecord import LogRecord
+from LogSink import LogSink
+
+export class MemorySink implements LogSink
+  -- How many it keeps; older ones make room.
+  capacity: integer
+
+  local kept: table<LogRecord>
+
+  fn init(capacity: integer = 500)
+    self.capacity = Math.max(capacity, 1)
+    self.kept = {}
+  end
+
+  fn write(record: LogRecord)
+    Table.insert(self.kept, record)
+    if #self.kept > self.capacity then
+      Table.remove(self.kept, 1)
+    end
+  end
+
+  -- What it holds, oldest first.
+  fn records() -> table<LogRecord>
+    local out: table<LogRecord> = {}
+    for record in self.kept do
+      Table.insert(out, record)
+    end
+    return out
+  end
+
+  fn clear() -> nil
+    self.kept = {}
+  end
+end

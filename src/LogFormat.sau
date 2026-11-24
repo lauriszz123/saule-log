@@ -1,0 +1,87 @@
+-- How a record reads as one line of text:
+--
+--   14:21:03.412 INFO  wm.session  window opened  id=3 title="Settings"
+--
+-- the time of day (UTC, to the millisecond), the level, the logger, the
+-- message, and the fields sorted by name. A string field is quoted when it
+-- has a space or an `=` in it, or is empty, so the line still splits back
+-- into its fields.
+
+from Level import Level
+from LogRecord import LogRecord
+
+export class LogFormat
+  -- The line for `record`, coloured for a terminal when `colour` is true.
+  static fn line(record: LogRecord, colour: boolean) -> string
+    local seconds = record.time / 1000
+    local millis = record.time % 1000
+    local clock = Os.date("%H:%M:%S", seconds) .. String.format(".%03d", millis)
+    local level = record.level.label()
+    local source = record.source
+    local fields = LogFormat.fields(record.fields)
+
+    if colour then
+      clock = LogFormat.paint(clock, "2")
+      level = LogFormat.paint(level, LogFormat.levelColour(record.level))
+      source = LogFormat.paint(source, "36")
+      if fields != "" then
+        fields = LogFormat.paint(fields, "2")
+      end
+    end
+
+    local out = clock .. " " .. level .. " " .. source .. "  " .. record.message
+    if fields != "" then
+      out = out .. "  " .. fields
+    end
+    return out
+  end
+
+  -- `fields` as `name=value` pairs, sorted by name, space-separated.
+  static fn fields(fields: table) -> string
+    local names: table<string> = {}
+    for name, _ in fields do
+      Table.insert(names, tostring(name))
+    end
+    Table.sort(names, (a: string, b: string) => a < b)
+
+    local parts: table<string> = {}
+    for name in names do
+      Table.insert(parts, name .. "=" .. LogFormat.value(fields[name]))
+    end
+    return Table.concat(parts, " ")
+  end
+
+  -- One field's value as it is written.
+  static fn value(value: any) -> string
+    if type(value) == "string" then
+      local text = (value as string?) ?? ""
+      local plain = text != ""
+      for special in {" ", "=", "\""} do
+        if String.contains(text, special) then
+          plain = false
+        end
+      end
+      if plain then
+        return text
+      end
+      return "\"" .. String.replace(text, "\"", "\\\"") .. "\""
+    end
+    return tostring(value)
+  end
+
+  -- The terminal colour for a level, as an SGR code.
+  static fn levelColour(level: Level) -> string
+    return match level
+      case Level.Trace then "2"
+      case Level.Debug then "34"
+      case Level.Info then "32"
+      case Level.Warn then "33"
+      case Level.Error then "1;31"
+      case Level.Off then "0"
+    end
+  end
+
+  static fn paint(text: string, code: string) -> string
+    return "\u{1b}[" .. code .. "m" .. text .. "\u{1b}[0m"
+  end
+end
