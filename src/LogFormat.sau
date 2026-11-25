@@ -53,8 +53,8 @@ export class LogFormat
 
   -- One field's value as it is written.
   static fn value(value: any) -> string
-    if type(value) == "string" then
-      local text = (value as string?) ?? ""
+    if value is string then
+      local text: string = value
       local plain = text != ""
       for special in {" ", "=", "\""} do
         if String.contains(text, special) then
